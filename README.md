@@ -54,7 +54,7 @@ $ when fajr
 Fajr — 03:57
 
 $ when alarm
-Alarm started — azan for Fajr, Dhuhr, Maghrib + desktop notifications
+Alarm started — Fajr, Dhuhr, Maghrib (azan: on, notify: on)
 Press Ctrl+C to stop.
 
 $ when alarm --daemon
@@ -122,6 +122,8 @@ Create `~/.config/when/config.json`:
 | `azan`       | `true`                                   | Play azan audio at prayer time     |
 | `notify`     | `true`                                   | Send desktop notification          |
 | `imsakOffset`| `0`                                      | Minutes before Fajr to trigger suhoor alarm |
+
+Settings must live under `alarm`; keys written at the top level are accepted too, and unknown or invalid settings produce a warning on startup instead of being silently ignored.
 
 Desktop notifications use `notify-send` (Linux) or `osascript` (macOS).
 

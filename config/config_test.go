@@ -132,6 +132,117 @@ func TestLoadDefaultsForMissingPrayersField(t *testing.T) {
 	}
 }
 
+func TestLoadFlatConfig(t *testing.T) {
+	oldHome := os.Getenv("HOME")
+	oldXDG := os.Getenv("XDG_CONFIG_HOME")
+	t.Cleanup(func() {
+		os.Setenv("HOME", oldHome)
+		os.Setenv("XDG_CONFIG_HOME", oldXDG)
+	})
+
+	tmp := t.TempDir()
+	os.Setenv("XDG_CONFIG_HOME", tmp)
+	os.Unsetenv("HOME")
+
+	cfgDir := filepath.Join(tmp, "when")
+	if err := os.MkdirAll(cfgDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	cfgContent := `{"prayers":["Fajr","Maghrib"],"azan":false,"notify":true,"imsakOffset":10}`
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(cfg.Alarm.Prayers) != 2 {
+		t.Errorf("expected 2 prayers, got %d", len(cfg.Alarm.Prayers))
+	}
+	if cfg.Alarm.Azan {
+		t.Error("expected Azan to be false")
+	}
+	if !cfg.Alarm.Notify {
+		t.Error("expected Notify to be true")
+	}
+	if cfg.Alarm.ImsakOffset != 10 {
+		t.Errorf("expected ImsakOffset 10, got %d", cfg.Alarm.ImsakOffset)
+	}
+}
+
+func TestLoadNestedSectionWinsOverFlatKeys(t *testing.T) {
+	oldHome := os.Getenv("HOME")
+	oldXDG := os.Getenv("XDG_CONFIG_HOME")
+	t.Cleanup(func() {
+		os.Setenv("HOME", oldHome)
+		os.Setenv("XDG_CONFIG_HOME", oldXDG)
+	})
+
+	tmp := t.TempDir()
+	os.Setenv("XDG_CONFIG_HOME", tmp)
+	os.Unsetenv("HOME")
+
+	cfgDir := filepath.Join(tmp, "when")
+	if err := os.MkdirAll(cfgDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	cfgContent := `{"notify":true,"alarm":{"azan":true,"notify":false}}`
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !cfg.Alarm.Azan {
+		t.Error("expected Azan to be true")
+	}
+	if cfg.Alarm.Notify {
+		t.Error("expected Notify to be false: nested \"alarm\" section must win")
+	}
+}
+
+func TestLoadIgnoresUnknownKeys(t *testing.T) {
+	oldHome := os.Getenv("HOME")
+	oldXDG := os.Getenv("XDG_CONFIG_HOME")
+	t.Cleanup(func() {
+		os.Setenv("HOME", oldHome)
+		os.Setenv("XDG_CONFIG_HOME", oldXDG)
+	})
+
+	tmp := t.TempDir()
+	os.Setenv("XDG_CONFIG_HOME", tmp)
+	os.Unsetenv("HOME")
+
+	cfgDir := filepath.Join(tmp, "when")
+	if err := os.MkdirAll(cfgDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	cfgContent := `{"alarm":{"azan":true,"notify":true,"loud":true},"version":2}`
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(cfgContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !cfg.Alarm.Azan || !cfg.Alarm.Notify {
+		t.Errorf("expected azan and notify to stay true, got azan=%v notify=%v", cfg.Alarm.Azan, cfg.Alarm.Notify)
+	}
+	if len(cfg.Alarm.Prayers) != 3 {
+		t.Errorf("expected default prayers, got %d", len(cfg.Alarm.Prayers))
+	}
+}
+
 func TestDataDir(t *testing.T) {
 	oldCache := os.Getenv("XDG_CACHE_HOME")
 	oldHome := os.Getenv("HOME")

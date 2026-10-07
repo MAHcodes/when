@@ -108,19 +108,25 @@ func logPrintf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "[%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), fmt.Sprintf(format, args...))
 }
 
+func onOff(v bool) string {
+	if v {
+		return "on"
+	}
+	return "off"
+}
+
 func Run() error {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	cfg, err := config.Load()
 	if err == nil {
-		msg := fmt.Sprintf("Alarm started — azan for %s", strings.Join(cfg.Alarm.Prayers, ", "))
-		if cfg.Alarm.Notify {
-			msg += " + desktop notifications"
-		}
+		msg := fmt.Sprintf("Alarm started — %s (azan: %s, notify: %s",
+			strings.Join(cfg.Alarm.Prayers, ", "), onOff(cfg.Alarm.Azan), onOff(cfg.Alarm.Notify))
 		if cfg.Alarm.ImsakOffset > 0 {
-			msg += fmt.Sprintf(" + suhoor %dmin before Fajr", cfg.Alarm.ImsakOffset)
+			msg += fmt.Sprintf(", suhoor %dmin before Fajr", cfg.Alarm.ImsakOffset)
 		}
+		msg += ")"
 		logPrintf(msg)
 	}
 	if isTerminal() {
@@ -212,10 +218,12 @@ func Run() error {
 			if label == "Suhoor" {
 				logPrintf("%s — time for suhoor", timeStr)
 				if cfg.Alarm.Notify {
+					logPrintf("%s — sending notification", label)
 					go Notify("Suhoor", timeStr)
 				}
 			} else {
 				if cfg.Alarm.Notify {
+					logPrintf("%s — sending notification", label)
 					go Notify(label, timeStr)
 				}
 				if cfg.Alarm.Azan {

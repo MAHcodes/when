@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -52,21 +53,82 @@ func DataDir() (string, error) {
 	return dir, nil
 }
 
+func alarmFields() map[string]bool {
+	return map[string]bool{
+		"prayers":     true,
+		"azan":        true,
+		"notify":      true,
+		"imsakOffset": true,
+	}
+}
+
+func warnf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "when: warning: "+format+"\n", args...)
+}
+
 func Load() (Config, error) {
 	p, err := path()
 	if err != nil {
 		return Default(), nil
 	}
 
-	f, err := os.Open(p)
+	data, err := os.ReadFile(p)
 	if err != nil {
 		return Default(), nil
 	}
-	defer f.Close()
 
-	var cfg Config
-	if err := json.NewDecoder(f).Decode(&cfg); err != nil {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		warnf("%s is not valid JSON, using defaults: %v", p, err)
 		return Default(), nil
+	}
+
+	cfg := Config{Alarm: AlarmConfig{}}
+	fields := alarmFields()
+
+	section, hasSection := raw["alarm"]
+	switch {
+	case hasSection:
+		for k := range raw {
+			if fields[k] {
+				warnf("%s: top-level %q is ignored, move it into the \"alarm\" object", p, k)
+			}
+		}
+	default:
+		flat := map[string]json.RawMessage{}
+		for k, v := range raw {
+			if fields[k] {
+				flat[k] = v
+			}
+		}
+		if len(flat) > 0 {
+			section, _ = json.Marshal(flat)
+			hasSection = true
+		}
+	}
+
+	if hasSection {
+		var alarmCfg AlarmConfig
+		if err := json.Unmarshal(section, &alarmCfg); err != nil {
+			warnf("%s: invalid \"alarm\" settings, ignoring them: %v", p, err)
+		} else {
+			cfg.Alarm = alarmCfg
+		}
+
+		var sectionKeys map[string]json.RawMessage
+		if err := json.Unmarshal(section, &sectionKeys); err == nil {
+			for k := range sectionKeys {
+				if !fields[k] {
+					warnf("%s: unknown alarm setting %q", p, k)
+				}
+			}
+		}
+	}
+
+	for k := range raw {
+		if k != "alarm" && !fields[k] {
+			warnf("%s: unknown setting %q", p, k)
+		}
 	}
 
 	if cfg.Alarm.Prayers == nil {
