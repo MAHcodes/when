@@ -139,101 +139,119 @@ func Run() error {
 	}
 
 	for {
-		select {
-		case <-sigCh:
-			logPrintf("Alarm stopped.")
-			return nil
-		default:
-		}
-
+		// Fetch the prayer times once. We only refetch when the day rolls
+		// over at midnight, not after every salat notification.
 		prayers, err := prayer.Fetch()
 		if err != nil {
 			logPrintf("Warning: fetch failed: %v", err)
-			time.Sleep(5 * time.Minute)
+			if !waitOrStop(sigCh, 5*time.Minute) {
+				logPrintf("Alarm stopped.")
+				return nil
+			}
 			continue
 		}
 
 		allEntries, err := prayer.TodayEntries(prayers)
 		if err != nil {
 			logPrintf("Warning: no alarm times available, retrying...")
-			time.Sleep(1 * time.Minute)
+			if !waitOrStop(sigCh, time.Minute) {
+				logPrintf("Alarm stopped.")
+				return nil
+			}
 			continue
 		}
 
-		type alarmEntry struct {
-			label string
-			time  time.Time
-		}
-		var entries []alarmEntry
-		now := time.Now()
-
-		for _, e := range allEntries {
-			if !alarmSet[e.Prayer.Name] {
-				continue
-			}
-			entries = append(entries, alarmEntry{e.Prayer.Name, e.Time})
-			if e.Prayer.Name == "Fajr" && cfg.Alarm.ImsakOffset > 0 {
-				suhoor := e.Time.Add(-time.Duration(cfg.Alarm.ImsakOffset) * time.Minute)
-				entries = append(entries, alarmEntry{"Suhoor", suhoor})
-			}
-		}
-
+		entries := buildEntries(allEntries, alarmSet, cfg.Alarm.ImsakOffset)
 		if len(entries) == 0 {
 			logPrintf("Warning: no alarm times available, retrying...")
-			time.Sleep(1 * time.Minute)
-			continue
-		}
-
-		var next *alarmEntry
-		for i := range entries {
-			if entries[i].time.After(now) {
-				next = &entries[i]
-				break
+			if !waitOrStop(sigCh, time.Minute) {
+				logPrintf("Alarm stopped.")
+				return nil
 			}
-		}
-
-		if next == nil {
-			first := entries[0]
-			tomorrow := time.Date(now.Year(), now.Month(), now.Day()+1, first.time.Hour(), first.time.Minute(), 0, 0, time.Local)
-			next = &alarmEntry{first.label, tomorrow}
-			logPrintf("All passed — next: %s tomorrow at %s", next.label, next.time.Format("15:04"))
-		} else {
-			logPrintf("Next alarm: %s at %s", next.label, next.time.Format("15:04"))
-		}
-
-		duration := next.time.Sub(now)
-		if duration <= 0 {
-			time.Sleep(10 * time.Second)
 			continue
 		}
 
-		select {
-		case <-sigCh:
+		now := time.Now()
+		for _, e := range entries {
+			if !e.time.After(now) {
+				continue
+			}
+
+			logPrintf("Next alarm: %s at %s", e.label, e.time.Format("15:04"))
+			if !waitOrStop(sigCh, time.Until(e.time)) {
+				logPrintf("Alarm stopped.")
+				return nil
+			}
+
+			fire(e, cfg.Alarm)
+			waitOrStop(sigCh, 30*time.Second)
+		}
+
+		// Every alarm for today has fired. Hold the schedule until midnight,
+		// then refresh the prayer times for the new day.
+		midnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.Local)
+		logPrintf("All alarms done — refetching at midnight")
+		if !waitOrStop(sigCh, time.Until(midnight)) {
 			logPrintf("Alarm stopped.")
 			return nil
-		case <-time.After(duration):
-			label := next.label
-			timeStr := next.time.Format("15:04")
-
-			if label == "Suhoor" {
-				logPrintf("%s — time for suhoor", timeStr)
-				if cfg.Alarm.Notify {
-					logPrintf("%s — sending notification", label)
-					go Notify("Suhoor", timeStr)
-				}
-			} else {
-				if cfg.Alarm.Notify {
-					logPrintf("%s — sending notification", label)
-					go Notify(label, timeStr)
-				}
-				if cfg.Alarm.Azan {
-					logPrintf("%s — playing azan", label)
-					if err := Play(); err != nil {
-						logPrintf("Warning: %v", err)
-					}
-				}
-			}
-			time.Sleep(30 * time.Second)
 		}
+	}
+}
+
+type alarmEntry struct {
+	label string
+	time  time.Time
+}
+
+func buildEntries(all []prayer.TimeEntry, alarmSet map[string]bool, imsakOffset int) []alarmEntry {
+	var entries []alarmEntry
+	for _, e := range all {
+		if !alarmSet[e.Prayer.Name] {
+			continue
+		}
+		entries = append(entries, alarmEntry{e.Prayer.Name, e.Time})
+		if e.Prayer.Name == "Fajr" && imsakOffset > 0 {
+			suhoor := e.Time.Add(-time.Duration(imsakOffset) * time.Minute)
+			entries = append(entries, alarmEntry{"Suhoor", suhoor})
+		}
+	}
+	return entries
+}
+
+func fire(e alarmEntry, cfg config.AlarmConfig) {
+	timeStr := e.time.Format("15:04")
+
+	if e.label == "Suhoor" {
+		logPrintf("%s — time for suhoor", timeStr)
+		if cfg.Notify {
+			logPrintf("%s — sending notification", e.label)
+			go Notify("Suhoor", timeStr)
+		}
+		return
+	}
+
+	if cfg.Notify {
+		logPrintf("%s — sending notification", e.label)
+		go Notify(e.label, timeStr)
+	}
+	if cfg.Azan {
+		logPrintf("%s — playing azan", e.label)
+		if err := Play(); err != nil {
+			logPrintf("Warning: %v", err)
+		}
+	}
+}
+
+// waitOrStop blocks for d, returning true when the duration elapses, or false
+// if a stop signal is received first.
+func waitOrStop(sigCh <-chan os.Signal, d time.Duration) bool {
+	if d <= 0 {
+		return true
+	}
+	select {
+	case <-sigCh:
+		return false
+	case <-time.After(d):
+		return true
 	}
 }
