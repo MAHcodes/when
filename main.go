@@ -22,6 +22,8 @@ Usage:
   when next [--countdown] [--json|--tsv]
                           show next upcoming prayer (or live countdown with --countdown)
   when all [--json|--tsv] show all prayer times
+  when refresh [--json|--tsv]
+                          force refetch of prayer times and update the cache
   when <prayer> [--json|--tsv]
                           show time for a specific prayer (case-insensitive)
   when alarm [--daemon]   schedule azan alarms and desktop notifications
@@ -66,6 +68,8 @@ func main() {
 		runNext(format, countdown)
 	case "all":
 		runAll(format)
+	case "refresh":
+		runRefresh(format)
 	case "alarm":
 		runAlarm(daemon)
 	case "systemd":
@@ -113,7 +117,19 @@ func runAll(format string) {
 		fmt.Fprintf(os.Stderr, "Error fetching prayer times: %v\n", err)
 		os.Exit(1)
 	}
+	printPrayers(prayers, format)
+}
 
+func runRefresh(format string) {
+	prayers, err := prayer.Refresh()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error refreshing prayer times: %v\n", err)
+		os.Exit(1)
+	}
+	printPrayers(prayers, format)
+}
+
+func printPrayers(prayers []prayer.Prayer, format string) {
 	switch format {
 	case "json":
 		s, err := prayer.PrayersJSON(prayers)
@@ -239,7 +255,7 @@ func printCompletion(flags []string) {
 	}
 
 	prayers := "imsak fajr shorouq dhuhr asr maghrib isha midnight"
-	cmds := "help version next all alarm systemd complete " + prayers
+	cmds := "help version next all refresh alarm systemd complete " + prayers
 
 	switch shell {
 	case "bash":
@@ -254,7 +270,7 @@ complete -F _when when
 `, cmds)
 	case "fish":
 		fmt.Printf(`# fish completion for when
-complete -c when -f -a "help version next all alarm systemd complete %s"
+complete -c when -f -a "help version next all refresh alarm systemd complete %s"
 `, prayers)
 	default:
 		fmt.Printf(`#compdef when

@@ -25,6 +25,7 @@ when version                  show version
 when next [--countdown] [--json|--tsv]
                               show next upcoming prayer (or live countdown with --countdown)
 when all [--json|--tsv]       show all prayer times
+when refresh [--json|--tsv]   force refetch of prayer times and update the cache
 when <prayer> [--json|--tsv]  show time for a specific prayer (case-insensitive)
 when alarm [--daemon]         schedule azan alarms and desktop notifications
 when systemd                  print systemd user service unit
@@ -53,6 +54,11 @@ $ when next --json
 $ when fajr
 Fajr — 03:57
 
+$ when refresh
+Imsak — 03:46
+Fajr — 03:57
+...
+
 $ when alarm
 Alarm started — Fajr, Dhuhr, Maghrib (azan: on, notify: on)
 Press Ctrl+C to stop.
@@ -66,11 +72,12 @@ Maghrib — 20:13 (2h44m59s remaining)
 
 ### Machine-readable output
 
-Use `--json` or `--tsv` with `all`, `next`, or any prayer name:
+Use `--json` or `--tsv` with `all`, `refresh`, `next`, or any prayer name:
 
 ```bash
 when all --json        # JSON array of all prayers
 when all --tsv         # tab-separated values
+when refresh --json    # refetch, update cache, and print all prayers as JSON
 when next --json       # single prayer object with remaining duration
 when fajr --json       # single prayer object
 ```

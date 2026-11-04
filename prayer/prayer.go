@@ -18,13 +18,13 @@ import (
 const baseURL = "https://almanar.com.lb/salat/"
 
 var arabicToEnglish = map[string]string{
-	"الإمساك":   "Imsak",
-	"صلاة الصبح": "Fajr",
-	"الشروق":    "Shorouq",
-	"الظهر":     "Dhuhr",
-	"العصر":     "Asr",
-	"المغرب":    "Maghrib",
-	"العشاء":    "Isha",
+	"الإمساك":     "Imsak",
+	"صلاة الصبح":  "Fajr",
+	"الشروق":      "Shorouq",
+	"الظهر":       "Dhuhr",
+	"العصر":       "Asr",
+	"المغرب":      "Maghrib",
+	"العشاء":      "Isha",
 	"منتصف الليل": "Midnight",
 }
 
@@ -64,8 +64,8 @@ func TodayEntries(prayers []Prayer) ([]TimeEntry, error) {
 }
 
 type cacheData struct {
-	Date   string    `json:"date"`
-	Prayer []Prayer  `json:"prayers"`
+	Date   string   `json:"date"`
+	Prayer []Prayer `json:"prayers"`
 }
 
 func cachePath() (string, error) {
@@ -124,7 +124,15 @@ func Fetch() ([]Prayer, error) {
 	if cached, err := readCache(); err == nil {
 		return cached, nil
 	}
+	return fetchRemote()
+}
 
+// Refresh ignores any cached data, refetches prayer times, and updates the cache.
+func Refresh() ([]Prayer, error) {
+	return fetchRemote()
+}
+
+func fetchRemote() ([]Prayer, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
