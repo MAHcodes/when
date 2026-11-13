@@ -1,5 +1,10 @@
 # when — Islamic prayer times CLI & alarm
 
+> [!WARNING]
+> **Disclaimer:** This project was "vibe coded" primarily for personal use that I decided to open-source. It is provided as-is, without any warranties.
+>
+> **USE AT YOUR OWN RISK**
+
 Fetches daily Islamic prayer times from [Al-Manar](https://almanar.com.lb/salat/) and provides subcommands to display them, find the next prayer, or schedule audible azan alarms with desktop notifications.
 
 ## Installation
