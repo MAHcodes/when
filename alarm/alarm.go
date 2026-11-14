@@ -115,6 +115,12 @@ func onOff(v bool) string {
 	return "off"
 }
 
+// maxRetries is the number of consecutive failed attempts (fetch failure or
+// missing alarm times) before the daemon gives up and exits. A successful
+// iteration resets the count. Returning an error exits non-zero, which lets
+// systemd's Restart=on-failure pick the daemon back up.
+const maxRetries = 10
+
 func Run() error {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -138,12 +144,18 @@ func Run() error {
 		alarmSet[n] = true
 	}
 
+	failures := 0
+
 	for {
 		// Fetch the prayer times once. We only refetch when the day rolls
 		// over at midnight, not after every salat notification.
 		prayers, err := prayer.Fetch()
 		if err != nil {
-			logPrintf("Warning: fetch failed: %v", err)
+			failures++
+			if failures >= maxRetries {
+				return fmt.Errorf("fetch failed %d times in a row: %w", failures, err)
+			}
+			logPrintf("Warning: fetch failed (%d/%d): %v", failures, maxRetries, err)
 			if !waitOrStop(sigCh, 5*time.Minute) {
 				logPrintf("Alarm stopped.")
 				return nil
@@ -153,7 +165,11 @@ func Run() error {
 
 		allEntries, err := prayer.TodayEntries(prayers)
 		if err != nil {
-			logPrintf("Warning: no alarm times available, retrying...")
+			failures++
+			if failures >= maxRetries {
+				return fmt.Errorf("no alarm times after %d attempts: %w", failures, err)
+			}
+			logPrintf("Warning: no alarm times available, retrying (%d/%d)...", failures, maxRetries)
 			if !waitOrStop(sigCh, time.Minute) {
 				logPrintf("Alarm stopped.")
 				return nil
@@ -163,13 +179,19 @@ func Run() error {
 
 		entries := buildEntries(allEntries, alarmSet, cfg.Alarm.ImsakOffset)
 		if len(entries) == 0 {
-			logPrintf("Warning: no alarm times available, retrying...")
+			failures++
+			if failures >= maxRetries {
+				return fmt.Errorf("no alarm times after %d attempts", failures)
+			}
+			logPrintf("Warning: no alarm times available, retrying (%d/%d)...", failures, maxRetries)
 			if !waitOrStop(sigCh, time.Minute) {
 				logPrintf("Alarm stopped.")
 				return nil
 			}
 			continue
 		}
+
+		failures = 0
 
 		now := time.Now()
 		for _, e := range entries {

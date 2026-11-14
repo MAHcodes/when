@@ -147,7 +147,7 @@ Prayer times are cached to `~/.cache/when/prayer-times.json`. If the network is 
 
 Each invocation checks the cache first. If no cached data exists for today, it fetches the HTML page from Al-Manar, parses the prayer times from the `mnr-salat-times` list, translates the Arabic names to English, and caches the result. Subsequent commands on the same day are instant — no network request is made.
 
-The alarm command (`when alarm`) stays running, checking the current time against the configured prayers. At the scheduled time it plays the embedded azan audio via `ffplay`, `paplay`, or `aplay`, and sends a desktop notification.
+The alarm command (`when alarm`) stays running, checking the current time against the configured prayers. At the scheduled time it plays the embedded azan audio via `ffplay`, `paplay`, or `aplay`, and sends a desktop notification. If fetching fails, it retries every 5 minutes (1 minute for missing alarm times) for up to 10 consecutive attempts before giving up; with the systemd service's `Restart=on-failure`, it is restarted after 60 seconds.
 
 ## License
 

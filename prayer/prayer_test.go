@@ -79,9 +79,9 @@ func TestFind(t *testing.T) {
 	}
 
 	tests := []struct {
-		query   string
-		wantOk  bool
-		want    string
+		query  string
+		wantOk bool
+		want   string
 	}{
 		{"Fajr", true, "03:57"},
 		{"fajr", true, "03:57"},
